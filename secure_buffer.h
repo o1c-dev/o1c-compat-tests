@@ -17,11 +17,8 @@
 #ifndef O1C_GEN_SECURE_BUFFER_H
 #define O1C_GEN_SECURE_BUFFER_H
 
-#include <cstddef>
-#include <cstdint>
 #include <string>
 #include <ostream>
-#include <iterator>
 
 class secure_buffer {
     uint8_t *buf;
