@@ -37,3 +37,6 @@ CMakeCache.txt
 CMakeFiles
 Makefile
 *.cmake
+Testing
+o1c-gen
+*.cbp
