@@ -9,6 +9,5 @@ add_library(libsodium-signcryption STATIC libsodium-signcryption/src/tbsbr/signc
 target_link_libraries(libsodium-signcryption PUBLIC PkgConfig::SODIUM)
 
 add_executable(o1c-gen main.cpp)
-target_include_directories(o1c-gen PRIVATE libsodium-signcryption/src/tbsbr)
-target_link_libraries(o1c-gen PUBLIC PkgConfig::SODIUM)
-target_link_libraries(o1c-gen PRIVATE libsodium-signcryption)
+target_include_directories(o1c-gen PUBLIC libsodium-signcryption/src/tbsbr)
+target_link_libraries(o1c-gen PUBLIC libsodium-signcryption)
