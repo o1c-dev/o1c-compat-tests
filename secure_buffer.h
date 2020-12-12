@@ -21,42 +21,45 @@
 #include <ostream>
 
 class secure_buffer {
-    uint8_t *buf;
+    unsigned char *buf;
     size_t len;
 
 public:
+    secure_buffer() noexcept;
+
     explicit secure_buffer(size_t len) noexcept;
 
+    // copy constructor for string literals
     explicit secure_buffer(const std::string &string) noexcept;
 
+    // copy constructor
     secure_buffer(const secure_buffer &that) noexcept;
 
+    // move constructor
     secure_buffer(secure_buffer &&that) noexcept;
 
     virtual ~secure_buffer() noexcept;
 
+    // assignment operator (swap)
     secure_buffer &operator=(secure_buffer that) noexcept;
+
+    // decode and copy constructor, may throw an exception
+    static secure_buffer from_hex(const std::string &hex);
 
     size_t size() const noexcept {
         return len;
     }
 
-    uint8_t *data() const noexcept {
+    unsigned char *data() const noexcept {
         return buf;
     }
 
-    char *c_str() const noexcept {
-        return reinterpret_cast<char *>(buf);
-    }
-
-    std::string string() const noexcept {
-        return std::string(buf, buf + len);
-    }
-
+    // fill this buffer with cryptographically secure random bytes
     void randomize() noexcept;
 
-    friend std::ostream &operator<<(std::ostream &os, const secure_buffer &buffer);
+    // TODO: expose mprotect stuff
 
+    friend std::ostream &operator<<(std::ostream &os, const secure_buffer &buffer);
 };
 
 

@@ -18,7 +18,12 @@
 #include "key_pair.h"
 
 key_pair::key_pair() noexcept: sk(crypto_signcrypt_tbsbr_SECRETKEYBYTES), pk(crypto_signcrypt_tbsbr_PUBLICKEYBYTES) {
-    crypto_signcrypt_tbsbr_keygen(pk.data(), sk.data());
+}
+
+key_pair key_pair::generate() noexcept {
+    auto kp = key_pair();
+    crypto_signcrypt_tbsbr_keygen(kp.pk.data(), kp.sk.data());
+    return std::move(kp);
 }
 
 std::ostream &operator<<(std::ostream &os, const key_pair &pair) {

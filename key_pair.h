@@ -25,6 +25,8 @@ struct key_pair {
 
     key_pair() noexcept;
 
+    static key_pair generate() noexcept;
+
     friend std::ostream &operator<<(std::ostream &os, const key_pair &pair);
 };
 

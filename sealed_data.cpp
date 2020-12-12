@@ -21,12 +21,31 @@
 #include "sealed_data.h"
 
 std::ostream &operator<<(std::ostream &os, const sealed_data &data) {
-    os << "nonce: " << data.nonce << " mac: " << data.mac << " sig: " << data.sig << " ct: " << data.ct;
+    os << data.nonce << data.ct << data.mac << data.sig;
     return os;
 }
 
-sealed_data seal(const secure_buffer &sender_id, const secure_buffer &recipient_id, const secure_buffer &info,
-                 const secure_buffer &sender_sk, const secure_buffer &recipient_pk, const secure_buffer &msg) {
+sealed_data sealed_data::unpack(const secure_buffer &buffer) {
+    // TODO: validate length
+    secure_buffer nonce(crypto_secretbox_xchacha20poly1305_NONCEBYTES);
+    secure_buffer mac(crypto_secretbox_xchacha20poly1305_MACBYTES);
+    secure_buffer sig(crypto_signcrypt_tbsbr_SIGNBYTES);
+    secure_buffer ct(buffer.size() - nonce.size() - mac.size() - sig.size());
+    auto n = buffer.data();
+    auto c = n + nonce.size();
+    auto m = c + ct.size();
+    auto s = m + mac.size();
+    auto end = s + sig.size();
+    std::copy(n, c, nonce.data());
+    std::copy(c, m, ct.data());
+    std::copy(m, s, mac.data());
+    std::copy(s, end, sig.data());
+    return std::move(sealed_data(nonce, mac, sig, ct));
+}
+
+sealed_data
+sealed_data::seal(const secure_buffer &sender_id, const secure_buffer &recipient_id, const secure_buffer &info,
+                  const secure_buffer &sender_sk, const secure_buffer &recipient_pk, const secure_buffer &msg) {
     secure_buffer st(crypto_signcrypt_tbsbr_STATEBYTES);
     secure_buffer key(crypto_secretbox_xchacha20poly1305_KEYBYTES);
     secure_buffer nonce(crypto_secretbox_xchacha20poly1305_NONCEBYTES);
@@ -46,19 +65,20 @@ sealed_data seal(const secure_buffer &sender_id, const secure_buffer &recipient_
     return std::move(sealed_data(nonce, mac, sig, ct));
 }
 
-secure_buffer unseal(const secure_buffer &sender_id, const secure_buffer &recipient_id, const secure_buffer &info,
-                     const secure_buffer &sender_pk, const secure_buffer &recipient_sk, const sealed_data &data) {
+secure_buffer
+sealed_data::unseal(const secure_buffer &sender_id, const secure_buffer &recipient_id, const secure_buffer &info,
+                    const secure_buffer &sender_pk, const secure_buffer &recipient_sk) const {
     secure_buffer st(crypto_signcrypt_tbsbr_STATEBYTES);
     secure_buffer key(crypto_secretbox_xchacha20poly1305_KEYBYTES);
-    secure_buffer msg(data.ct.size());
-    if (crypto_signcrypt_tbsbr_verify_before(st.data(), key.data(), data.sig.data(), sender_id.data(), sender_id.size(),
+    secure_buffer msg(ct.size());
+    if (crypto_signcrypt_tbsbr_verify_before(st.data(), key.data(), sig.data(), sender_id.data(), sender_id.size(),
                                              recipient_id.data(), recipient_id.size(), info.data(), info.size(),
                                              sender_pk.data(), recipient_sk.data()) != 0 ||
-        crypto_aead_xchacha20poly1305_ietf_decrypt_detached(msg.data(), nullptr, data.ct.data(), data.ct.size(),
-                                                            data.mac.data(), info.data(), info.size(),
-                                                            data.nonce.data(), key.data()) != 0 ||
-        crypto_signcrypt_tbsbr_verify_after(st.data(), data.sig.data(), sender_pk.data(), data.ct.data(),
-                                            data.ct.size()) != 0) {
+        crypto_aead_xchacha20poly1305_ietf_decrypt_detached(msg.data(), nullptr, ct.data(), ct.size(),
+                                                            mac.data(), info.data(), info.size(),
+                                                            nonce.data(), key.data()) != 0 ||
+        crypto_signcrypt_tbsbr_verify_after(st.data(), sig.data(), sender_pk.data(), ct.data(),
+                                            ct.size()) != 0) {
         throw sealed_data_exception();
     }
     return std::move(msg);

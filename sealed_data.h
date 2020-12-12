@@ -28,14 +28,17 @@ struct sealed_data {
     sealed_data(secure_buffer nonce, secure_buffer mac, secure_buffer sig, secure_buffer ct) noexcept
             : nonce(std::move(nonce)), mac(std::move(mac)), sig(std::move(sig)), ct(std::move(ct)) {}
 
+    static sealed_data unpack(const secure_buffer &buffer);
+
+    static sealed_data
+    seal(const secure_buffer &sender_id, const secure_buffer &recipient_id, const secure_buffer &info,
+         const secure_buffer &sender_sk, const secure_buffer &recipient_pk, const secure_buffer &msg);
+
+    secure_buffer unseal(const secure_buffer &sender_id, const secure_buffer &recipient_id, const secure_buffer &info,
+                         const secure_buffer &sender_pk, const secure_buffer &recipient_sk) const;
+
     friend std::ostream &operator<<(std::ostream &os, const sealed_data &data);
 };
-
-sealed_data seal(const secure_buffer &sender_id, const secure_buffer &recipient_id, const secure_buffer &info,
-                 const secure_buffer &sender_sk, const secure_buffer &recipient_pk, const secure_buffer &msg);
-
-secure_buffer unseal(const secure_buffer &sender_id, const secure_buffer &recipient_id, const secure_buffer &info,
-                     const secure_buffer &sender_pk, const secure_buffer &recipient_sk, const sealed_data &data);
 
 struct sealed_data_exception : std::exception {
 };
