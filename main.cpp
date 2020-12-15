@@ -18,17 +18,28 @@
 #include <sodium.h>
 #include <getopt.h>
 
-#include "secure_buffer.h"
-#include "sealed_data.h"
+#include "signcrypt.h"
 
+#define DEFAULT_CONTEXT "https://o1c.dev/"
+
+// TODO: rename output
+// TODO: options should be -s secret_key -p public_key -f from_sender_id -t to_recipient_id
 void usage() {
-    std::cerr << "o1c-gen: encrypts or decrypts stdin to stdout"
+    std::cerr << "o1c-sc: signcrypts (-e) or unsigncrypts (-d) stdin to stdout"
               << std::endl
-              << "o1c-gen -e -a <sender_sk> -b <recipient_pk> [-s <sender_key id>] [-r <recipient_key id>] [-c <context>]"
+              << "o1c-sc -e -s <sender secret key> -r <recipient public key> [-S <from sender id>] [-R <to recipient id>] [-C <context>]"
               << std::endl
-              << "o1c-gen -d -a <sender_pk> -b <recipient_sk> [-s <sender_key id>] [-r <recipient_key id>] [-c <context>]"
-              << std::endl;
+              << "o1c-sc -d -s <sender public key> -r <recipient secret key> [-S <from sender id>] [-R <to recipient id>] [-C <context>]"
+              << std::endl
+              << "default ids are corresponding public keys; default context is " << DEFAULT_CONTEXT << std::endl;
 }
+
+/*
+ * break up into:
+ * o1c-encrypt
+ * o1c-signcrypt
+ * o1c-sign
+ */
 
 int main(int argc, char *argv[]) {
     if (sodium_init() == -1) {
@@ -44,25 +55,25 @@ int main(int argc, char *argv[]) {
 
     opterr = 0;
     int c;
-    while ((c = getopt(argc, argv, "a:b:s:r:c:hed")) != -1) {
+    while ((c = getopt(argc, argv, "edhs:r:S:R:C:")) != -1) {
         switch (c) {
-            case 'a':
+            case 's':
                 sender_key = optarg;
                 break;
 
-            case 'b':
+            case 'r':
                 recipient_key = optarg;
                 break;
 
-            case 's':
+            case 'S':
                 sender_id = optarg;
                 break;
 
-            case 'r':
+            case 'R':
                 recipient_id = optarg;
                 break;
 
-            case 'c':
+            case 'C':
                 context = optarg;
                 break;
 
@@ -85,35 +96,43 @@ int main(int argc, char *argv[]) {
     }
 
     std::istreambuf_iterator<char> begin(std::cin), end;
-    auto input = secure_buffer(std::string(begin, end));
-    auto info = secure_buffer(context);
+    auto input = o1c::buffer(begin, end);
+    auto info = o1c::buffer(context.cbegin(), context.cend());
 
     if (encrypt) {
-        auto sk = secure_buffer::from_hex(sender_key);
-        auto pk = secure_buffer::from_hex(recipient_key);
-        secure_buffer sid;
+        auto sk = o1c::parse_secret_key(sender_key);
+        auto pk = o1c::parse_public_key(recipient_key);
+        o1c::buffer sid, rid;
         if (sender_id.empty()) {
-            sid = secure_buffer(sk.size());
-            crypto_scalarmult_ristretto255_base(sid.data(), sk.data());
+            auto sender_pk = o1c::gen_public_key(sk);
+            sid = o1c::buffer(sender_pk.cbegin(), sender_pk.cend());
         } else {
-            sid = secure_buffer(sender_id);
+            sid = o1c::buffer(sender_id.cbegin(), sender_id.cend());
         }
-        auto rid = recipient_id.empty() ? secure_buffer(pk) : secure_buffer(recipient_id);
-        auto sealed = sealed_data::seal(sid, rid, info, sk, pk, input);
-        std::cout << sealed;
-    } else {
-        auto sk = secure_buffer::from_hex(recipient_key);
-        auto pk = secure_buffer::from_hex(sender_key);
-        secure_buffer rid;
         if (recipient_id.empty()) {
-            rid = secure_buffer(sk.size());
-            crypto_scalarmult_ristretto255_base(rid.data(), sk.data());
+            rid = o1c::buffer(pk.cbegin(), pk.cend());
         } else {
-            rid = secure_buffer(recipient_id);
+            rid = o1c::buffer(recipient_id.cbegin(), recipient_id.cend());
         }
-        auto sid = sender_id.empty() ? secure_buffer(pk) : secure_buffer(sender_id);
-        auto unsealed = sealed_data::unpack(input).unseal(sid, rid, info, pk, sk);
-        std::cout << unsealed;
+        auto wrapped = o1c::signcrypt(sid, rid, info, sk, pk, input);
+        std::move(wrapped.begin(), wrapped.end(), std::ostream_iterator<char>(std::cout));
+    } else {
+        auto sk = o1c::parse_secret_key(recipient_key);
+        auto pk = o1c::parse_public_key(sender_key);
+        o1c::buffer rid, sid;
+        if (recipient_id.empty()) {
+            auto recipient_pk = o1c::gen_public_key(sk);
+            rid = o1c::buffer(recipient_pk.cbegin(), recipient_pk.cend());
+        } else {
+            rid = o1c::buffer(recipient_id.cbegin(), recipient_id.cend());
+        }
+        if (sender_id.empty()) {
+            sid = o1c::buffer(pk.cbegin(), pk.cend());
+        } else {
+            rid = o1c::buffer(sender_id.cbegin(), sender_id.cend());
+        }
+        auto unwrapped = o1c::unsigncrypt(sid, rid, info, pk, sk, input);
+        std::move(unwrapped.begin(), unwrapped.end(), std::ostream_iterator<char>(std::cout));
     }
 
     return 0;
